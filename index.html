@@ -1,0 +1,1913 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LogicExpress: เกมวางแผนระบบขนส่งอัจฉริยะ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Kanit & Prompt for friendly, modern Thai typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for crisp icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Tone.js for procedural sound effects (no external audio URLs) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: #f0f4f8;
+            user-select: none;
+        }
+        .font-mono-code {
+            font-family: 'JetBrains Mono', 'Kanit', monospace;
+        }
+        /* Custom scrollbar for command workspace */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.35);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 0.55);
+        }
+
+        /* Animations */
+        @keyframes bump {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(-4px, 0); }
+            50% { transform: translate(4px, 0); }
+            75% { transform: translate(-2px, 0); }
+        }
+        .animate-bump {
+            animation: bump 0.35s ease-in-out;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop-in {
+            animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+            50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+        }
+        .active-block-highlight {
+            animation: pulseGlow 1s infinite;
+            border-color: #2563eb !important;
+            background-color: #eff6ff !important;
+            transform: translateX(4px);
+        }
+
+        /* Grid road textures */
+        .tile-road {
+            background-color: #e2e8f0;
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 10px 10px;
+        }
+        .tile-rough {
+            background-color: #fef3c7;
+            background-image: repeating-linear-gradient(
+                45deg,
+                #fde68a,
+                #fde68a 6px,
+                #fef3c7 6px,
+                #fef3c7 12px
+            );
+        }
+        .tile-wall {
+            background-color: #334155;
+            background-image: linear-gradient(135deg, #1e293b 25%, transparent 25%),
+                              linear-gradient(225deg, #1e293b 25%, transparent 25%),
+                              linear-gradient(45deg, #1e293b 25%, transparent 25%),
+                              linear-gradient(315deg, #1e293b 25%, #334155 25%);
+            background-position: 8px 0, 8px 0, 0 0, 0 0;
+            background-size: 16px 16px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+    <!-- ==================== TOP HEADER BAR ==================== -->
+    <header class="bg-slate-900 text-white px-4 py-3 shadow-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <!-- Brand & Title -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                    <i class="fa-solid fa-truck-fast text-white text-lg"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-bold text-lg sm:text-xl tracking-tight">LogicExpress</h1>
+                        <span class="text-xs bg-blue-500/20 text-blue-300 border border-blue-400/30 px-2 py-0.5 rounded-full">ม.ต้น • วิทยาการคำนวณ</span>
+                    </div>
+                    <p class="text-xs text-slate-400 hidden sm:block">เกมจำลองการวางแผนระบบขนส่งอัจฉริยะ</p>
+                </div>
+            </div>
+
+            <!-- Level Selector Pills -->
+            <div class="flex items-center gap-1.5 bg-slate-800 p-1.5 rounded-xl overflow-x-auto max-w-full" id="level-selector">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Right Controls: Sound, Hint, Teacher Stats -->
+            <div class="flex items-center gap-2">
+                <button id="btn-sound" onclick="toggleSound()" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="เปิด/ปิดเสียง">
+                    <i id="icon-sound" class="fa-solid fa-volume-high"></i>
+                </button>
+                <button onclick="openModal('modal-hint')" class="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/30 text-sm font-medium flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-lightbulb"></i>
+                    <span>คำใบ้</span>
+                </button>
+                <button onclick="openTeacherDashboard()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-chart-line text-emerald-400"></i>
+                    <span class="hidden md:inline">สถิติการเรียนรู้</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ==================== MISSION BRIEFING BANNER ==================== -->
+    <div class="bg-white border-b border-slate-200 px-4 py-2.5 shadow-sm">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <div class="flex items-start sm:items-center gap-3">
+                <span id="mission-badge" class="px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-700 font-bold text-xs whitespace-nowrap mt-0.5 sm:mt-0">
+                    ด่านที่ 1/7
+                </span>
+                <div>
+                    <h2 id="mission-title" class="font-bold text-base sm:text-lg text-slate-800">ส่งด่วนก้าวแรก</h2>
+                    <p id="mission-desc" class="text-xs sm:text-sm text-slate-600">บังคับรถไปรับพัสดุ 1 กล่อง แล้วนำไปส่งที่จุดหมายปลายทาง</p>
+                </div>
+            </div>
+            <!-- Mission Constraints & Star Criteria -->
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+                <div id="mission-condition-tag" class="hidden px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span id="mission-condition-text">เงื่อนไขพิเศษ</span>
+                </div>
+                <div class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5" title="เกณฑ์รับดาวความกระชับ">
+                    <i class="fa-solid fa-cubes text-blue-500"></i>
+                    <span>เป้าหมายบล็อก: <strong id="target-blocks-text" class="text-blue-700">≤ 4 บล็อก</strong></span>
+                </div>
+                <div class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5">
+                    <i class="fa-solid fa-rotate text-slate-500"></i>
+                    <span>รันแล้ว: <strong id="attempt-count-text">0</strong> ครั้ง</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MAIN 3-ZONE WORKSPACE ==================== -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+
+        <!-- ZONE 1 (LEFT): SIMULATION MAP & FEEDBACK CARD (5 cols on lg) -->
+        <section class="lg:col-span-5 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col justify-between relative overflow-hidden">
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-semibold text-slate-700 flex items-center gap-2 text-sm sm:text-base">
+                        <i class="fa-solid fa-map-location-dot text-blue-600"></i>
+                        <span>พื้นที่จำลองเส้นทาง</span>
+                    </h3>
+                    <!-- Status Pill -->
+                    <div id="truck-status-pill" class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-medium flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span id="truck-cargo-text">ในรถ: ว่างเปล่า</span>
+                    </div>
+                </div>
+
+                <!-- Grid Container -->
+                <div class="w-full aspect-square max-w-[400px] mx-auto bg-slate-100 p-2 rounded-2xl border-2 border-slate-200 shadow-inner relative">
+                    <div id="game-grid" class="w-full h-full grid gap-1.5">
+                        <!-- Grid cells rendered by JS -->
+                    </div>
+                </div>
+
+                <!-- Map Legend -->
+                <div id="map-legend" class="mt-3 flex flex-wrap justify-center gap-2 text-[11px] text-slate-600">
+                    <!-- Dynamic legend rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Live Step Log Banner -->
+            <div class="mt-3 bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2 text-slate-600 truncate">
+                    <i class="fa-solid fa-terminal text-slate-400"></i>
+                    <span id="live-log-text" class="truncate">พร้อมรับคำสั่ง... กดเลือกบล็อกทางขวาเพื่อเริ่มต้น</span>
+                </div>
+                <span id="step-counter" class="font-mono-code text-slate-400 ml-2 whitespace-nowrap">0/0</span>
+            </div>
+
+            <!-- END-OF-RUN FEEDBACK OVERLAY CARD (Spec: Run all commands first, then show summary) -->
+            <div id="feedback-overlay" class="hidden absolute inset-0 bg-slate-900/75 backdrop-blur-sm z-20 p-4 flex items-center justify-center animate-pop-in">
+                <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-100 text-center">
+                    <div id="fb-icon-wrap" class="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center text-2xl">
+                        <!-- Icon injected by JS -->
+                    </div>
+                    <h4 id="fb-title" class="font-bold text-xl text-slate-800 mb-1">สรุปผลการรันคำสั่ง</h4>
+
+                    <!-- Stars Display (Shown on Success) -->
+                    <div id="fb-stars" class="hidden flex justify-center gap-2 my-2 text-2xl">
+                        <!-- Stars injected by JS -->
+                    </div>
+
+                    <p id="fb-message" class="text-sm text-slate-600 leading-relaxed mb-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-left">
+                        <!-- Detailed diagnostic feedback injected by JS -->
+                    </p>
+
+                    <!-- Star Breakdown Checklist -->
+                    <div id="fb-checklist" class="text-left text-xs space-y-1.5 mb-4 bg-slate-50/70 p-2.5 rounded-xl">
+                        <!-- Checklist items injected by JS -->
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="dismissFeedbackAndReset()" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-wrench"></i>
+                            <span>แก้ไขคำสั่ง</span>
+                        </button>
+                        <button id="fb-btn-next" onclick="nextLevel()" class="hidden flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md transition flex items-center justify-center gap-1.5">
+                            <span>ด่านถัดไป</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ZONE 2 (CENTER): PROGRAM SEQUENCE WORKSPACE (4 cols on lg) -->
+        <section class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col min-h-[340px]">
+            <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                <h3 class="font-semibold text-slate-700 flex items-center gap-2 text-sm sm:text-base">
+                    <i class="fa-solid fa-list-ol text-indigo-600"></i>
+                    <span>ลำดับคำสั่งของคุณ</span>
+                </h3>
+                <div class="flex items-center gap-2">
+                    <span id="block-count-badge" class="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700">
+                        0 บล็อก
+                    </span>
+                    <button onclick="clearWorkspace()" id="btn-clear" class="text-xs px-2.5 py-1 rounded-lg text-rose-600 hover:bg-rose-50 font-medium transition" title="ล้างบล็อกทั้งหมด">
+                        <i class="fa-solid fa-trash-can"></i> ล้าง
+                    </button>
+                </div>
+            </div>
+
+            <!-- Active Container Indicator (When adding blocks inside Repeat / If / Else) -->
+            <div id="target-scope-bar" class="mb-2.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-800 flex items-center justify-between">
+                <span class="flex items-center gap-1.5 truncate">
+                    <i class="fa-solid fa-arrow-turn-down text-indigo-500"></i>
+                    <span>ตำแหน่งเพิ่มบล็อก: <strong id="target-scope-label">รายการหลัก (Main)</strong></span>
+                </span>
+                <button id="btn-reset-scope" onclick="setInsertionTarget(null)" class="hidden text-indigo-600 hover:underline font-semibold ml-2 whitespace-nowrap">
+                    กลับสู่หลัก
+                </button>
+            </div>
+
+            <!-- Program Blocks List -->
+            <div id="workspace-list" class="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[420px]">
+                <!-- Empty state or block tree rendered by JS -->
+            </div>
+        </section>
+
+        <!-- ZONE 3 (RIGHT): COMMAND BLOCK PALETTE (3 cols on lg) -->
+        <section class="lg:col-span-3 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col justify-between">
+            <div>
+                <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                    <h3 class="font-semibold text-slate-700 flex items-center gap-2 text-sm sm:text-base">
+                        <i class="fa-solid fa-cubes-stacked text-emerald-600"></i>
+                        <span>คลังบล็อกคำสั่ง</span>
+                    </h3>
+                    <span class="text-[11px] text-slate-400">คลิกเพื่อเพิ่ม</span>
+                </div>
+
+                <!-- Basic Movement & Action Blocks -->
+                <div class="mb-4">
+                    <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">คำสั่งพื้นฐาน</p>
+                    <div id="palette-basic" class="grid grid-cols-2 lg:grid-cols-1 gap-2">
+                        <!-- Rendered by JS -->
+                    </div>
+                </div>
+
+                <!-- Logic & Control Blocks (Unlocked progressively) -->
+                <div id="palette-logic-section" class="hidden">
+                    <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">คำสั่งควบคุม & เงื่อนไข</p>
+                    <div id="palette-logic" class="grid grid-cols-1 gap-2">
+                        <!-- Rendered by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Tip Box -->
+            <div class="mt-4 bg-blue-50/80 border border-blue-100 rounded-xl p-3 text-xs text-blue-800">
+                <div class="font-semibold flex items-center gap-1.5 mb-1">
+                    <i class="fa-solid fa-circle-info text-blue-500"></i>
+                    <span>กติกาการทดสอบ</span>
+                </div>
+                <p class="text-blue-700/90 leading-relaxed">
+                    เมื่อกด <strong>รันคำสั่ง</strong> รถจะวิ่งตามบล็อกที่วางไว้จนจบสาย (หากชนกำแพงรถจะหยุดอยู่กับที่และข้ามคำสั่งเดินที่ติดขัด) แล้วสรุปผลให้ดูตอนท้าย
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <!-- ==================== BOTTOM EXECUTION BAR ==================== -->
+    <footer class="bg-white border-t border-slate-200 px-4 py-3 sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.03)]">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <!-- Left: Speed Control & Reset Position -->
+            <div class="flex items-center gap-2">
+                <button id="btn-reset-pos" onclick="resetSimulationState()" class="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>รีเซ็ตตำแหน่งรถ</span>
+                </button>
+
+                <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <span class="text-xs text-slate-500 px-2 hidden sm:inline">ความเร็ว:</span>
+                    <button onclick="setSpeed(1)" id="speed-1" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-blue-600 shadow-sm transition">1x</button>
+                    <button onclick="setSpeed(2)" id="speed-2" class="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">2x</button>
+                </div>
+            </div>
+
+            <!-- Center/Right: Primary RUN Button -->
+            <div class="flex items-center gap-3 ml-auto">
+                <button id="btn-run" onclick="runProgram()" class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-sm sm:text-base shadow-lg shadow-emerald-500/25 active:scale-95 transition flex items-center gap-2">
+                    <i id="icon-run" class="fa-solid fa-play"></i>
+                    <span id="text-run">รันคำสั่ง (Run)</span>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ==================== MODAL: HINT ==================== -->
+    <div id="modal-hint" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl animate-pop-in">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-lightbulb text-amber-500"></i>
+                    <span>คำใบ้สำหรับด่านนี้</span>
+                </h3>
+                <button onclick="closeModal('modal-hint')" class="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <p id="hint-modal-text" class="text-sm text-slate-600 leading-relaxed bg-amber-50/70 border border-amber-200 p-3.5 rounded-xl mb-4">
+                <!-- Hint injected by JS -->
+            </p>
+            <button onclick="closeModal('modal-hint')" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm transition">
+                เข้าใจแล้ว ลุยต่อเลย!
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: TEACHER / LEARNING ANALYTICS ==================== -->
+    <div id="modal-teacher" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl animate-pop-in max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-emerald-600"></i>
+                        <span>บันทึกผลการเรียนรู้และจุดที่ควรพัฒนา (สำหรับผู้สอน)</span>
+                    </h3>
+                    <p class="text-xs text-slate-500">ติดตามความก้าวหน้า จำนวนครั้งที่ลองผิดลองถูก และรูปแบบข้อผิดพลาด</p>
+                </div>
+                <button onclick="closeModal('modal-teacher')" class="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div id="teacher-stats-body" class="py-4 overflow-y-auto space-y-4 flex-1">
+                <!-- Analytics populated by JS -->
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex justify-between items-center">
+                <button onclick="resetAllProgress()" class="text-xs text-rose-600 hover:underline font-medium">
+                    ล้างสถิติทั้งหมด
+                </button>
+                <button onclick="closeModal('modal-teacher')" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm transition">
+                    ปิดหน้าต่าง
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== JAVASCRIPT GAME ENGINE ==================== -->
+    <script>
+        /**
+         * ============================================================================
+         * 1. LEVEL DEFINITIONS (7 PROGRESSIVE LEVELS AS SPECIFIED)
+         * ============================================================================
+         * Directions: 0 = UP (North), 1 = RIGHT (East), 2 = DOWN (South), 3 = LEFT (West)
+         * Grid Tile Types:
+         *  0 = Wall / Building (Obstacle - truck stops in place if hitting this)
+         *  1 = Normal Road
+         *  2 = Rough Road (Damages fragile packages if driven over!)
+         *  3 = Gate / Checkpoint (Requires condition check in Level 6)
+         */
+        const LEVELS = [
+            {
+                id: 1,
+                title: "ส่งด่วนก้าวแรก",
+                concept: "ลำดับขั้นตอน (Sequence)",
+                desc: "ขับรถตรงไปเก็บพัสดุ 1 กล่อง แล้วนำไปส่งที่จุดหมายปลายทาง",
+                conditionText: null,
+                hint: "สังเกตช่องที่พัสดุวางอยู่ (ห่างไป 2 ช่อง) ต้องใช้คำสั่ง 'รับพัสดุ' เมื่อรถจอดทับช่องพัสดุพอดี จากนั้นเดินหน้าต่ออีก 2 ช่องแล้วใช้ 'ส่งพัสดุ'",
+                gridSize: 5,
+                maxBlocksForStar: 6,
+                maxAttemptsForStar: 2,
+                allowedBlocks: ["MOVE", "PICKUP", "DROP"],
+                start: { x: 0, y: 2, dir: 1 }, // Facing Right
+                grid: [
+                    [0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 1],
+                    [0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0]
+                ],
+                packages: [
+                    { id: "p1", x: 2, y: 2, type: "normal", label: "พัสดุทั่วไป" }
+                ],
+                goals: [
+                    { id: "g1", x: 4, y: 2, acceptType: "any", label: "จุดส่งสินค้า" }
+                ]
+            },
+            {
+                id: 2,
+                title: "เลี้ยวเข้าซอยส่งของ",
+                concept: "ทิศทางและมุมมอง (Orientation)",
+                desc: "เส้นทางรูปตัว L มีอาคารกั้น ขับไปรับพัสดุที่หัวมุมแล้วเลี้ยวขึ้นไปส่งด้านบน",
+                conditionText: "ระวัง! เลี้ยวซ้าย-ขวาอิงตามหน้ารถ ไม่ใช่หน้าจอ",
+                hint: "รถหันหน้าไปทางขวา เมื่อเดินถึงมุม (ช่องที่ 3) หากต้องการขึ้นด้านบน ให้ใช้คำสั่ง 'เลี้ยวซ้าย' (ตามมุมมองคนขับรถ)",
+                gridSize: 5,
+                maxBlocksForStar: 8,
+                maxAttemptsForStar: 2,
+                allowedBlocks: ["MOVE", "TURN_LEFT", "TURN_RIGHT", "PICKUP", "DROP"],
+                start: { x: 0, y: 3, dir: 1 },
+                grid: [
+                    [0, 0, 0, 1, 0],
+                    [0, 0, 0, 1, 0],
+                    [0, 0, 0, 1, 0],
+                    [1, 1, 1, 1, 0],
+                    [0, 0, 0, 0, 0]
+                ],
+                packages: [
+                    { id: "p1", x: 3, y: 3, type: "normal", label: "พัสดุทั่วไป" }
+                ],
+                goals: [
+                    { id: "g1", x: 3, y: 0, acceptType: "any", label: "จุดส่งสินค้า" }
+                ]
+            },
+            {
+                id: 3,
+                title: "ถนนสายยาวกับทางเดิมซ้ำๆ",
+                concept: "การทำซ้ำขั้นต้น (Basic Loop)",
+                desc: "ถนนสายตรงยาว 5 ช่อง ลองใช้บล็อก 'ทำซ้ำ' เพื่อย่อชุดคำสั่งให้กระชับ!",
+                conditionText: "ปลดล็อกบล็อกใหม่: ทำซ้ำ (Repeat)",
+                hint: "คลิกที่บล็อก 'ทำซ้ำ' เพื่อเพิ่มลงในรายการ จากนั้นคลิกเลือกพื้นที่ด้านในบล็อกทำซ้ำ แล้วกด 'เดินหน้า' ปรับจำนวนรอบเป็น 5 รอบ",
+                gridSize: 6,
+                maxBlocksForStar: 4,
+                maxAttemptsForStar: 2,
+                allowedBlocks: ["MOVE", "TURN_LEFT", "TURN_RIGHT", "PICKUP", "DROP", "REPEAT"],
+                start: { x: 0, y: 2, dir: 1 },
+                grid: [
+                    [0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 1, 1],
+                    [0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0]
+                ],
+                packages: [
+                    { id: "p1", x: 0, y: 2, type: "normal", label: "พัสดุทั่วไป" }
+                ],
+                goals: [
+                    { id: "g1", x: 5, y: 2, acceptType: "any", label: "จุดส่งสินค้า" }
+                ]
+            },
+            {
+                id: 4,
+                title: "ทางคดเคี้ยวมีจังหวะ",
+                concept: "การทำซ้ำเชิงประยุกต์ (Pattern Loop)",
+                desc: "เส้นทางขั้นบันไดที่มีรูปแบบซ้ำกัน 3 ช่วง หาแพตเทิร์นให้เจอแล้วใส่ในบล็อกทำซ้ำ",
+                conditionText: "เป้าหมาย: ใช้ไม่เกิน 7 บล็อกเพื่อคว้า 3 ดาว",
+                hint: "สังเกต 1 ขั้นบันได: เดินหน้า -> เลี้ยวซ้าย -> เดินหน้า -> เลี้ยวขวา แพตเทิร์นนี้ซ้ำกันทั้งหมด 3 รอบพอดี!",
+                gridSize: 5,
+                maxBlocksForStar: 7,
+                maxAttemptsForStar: 3,
+                allowedBlocks: ["MOVE", "TURN_LEFT", "TURN_RIGHT", "PICKUP", "DROP", "REPEAT"],
+                start: { x: 0, y: 4, dir: 1 },
+                grid: [
+                    [0, 0, 1, 1, 0],
+                    [0, 1, 1, 0, 0],
+                    [1, 1, 0, 0, 0],
+                    [1, 0, 0, 0, 0],
+                    [1, 0, 0, 0, 0]
+                ],
+                // Custom path for clear 3-step staircase
+                customOverride: true,
+                gridOverride: [
+                    [0, 0, 0, 1, 1],
+                    [0, 0, 1, 1, 0],
+                    [0, 1, 1, 0, 0],
+                    [1, 1, 0, 0, 0],
+                    [0, 0, 0, 0, 0]
+                ],
+                startOverride: { x: 0, y: 3, dir: 1 },
+                packages: [
+                    { id: "p1", x: 0, y: 3, type: "normal", label: "พัสดุทั่วไป" }
+                ],
+                goals: [
+                    { id: "g1", x: 4, y: 0, acceptType: "any", label: "จุดส่งสินค้า" }
+                ]
+            },
+            {
+                id: 5,
+                title: "ระวัง! พัสดุแตกง่าย",
+                concept: "เงื่อนไขขั้นต้น (Basic If)",
+                desc: "พัสดุในด่านนี้เป็น 'ของเปราะบาง' ห้ามวิ่งผ่านทางขรุขระ (สีเหลือง) เด็ดขาด!",
+                conditionText: "เงื่อนไข: พัสดุเปราะบางห้ามผ่านทางขรุขระ",
+                hint: "เส้นทางตรงด้านล่างเป็นทางขรุขระ ถ้ารถถือพัสดุเปราะบางวิ่งผ่านของจะเสียหาย ให้ใช้เงื่อนไข 'ถ้าถือพัสดุเปราะบาง' เพื่อเลี้ยวอ้อมไปใช้ทางเรียบด้านบน",
+                gridSize: 5,
+                maxBlocksForStar: 9,
+                maxAttemptsForStar: 3,
+                allowedBlocks: ["MOVE", "TURN_LEFT", "TURN_RIGHT", "PICKUP", "DROP", "REPEAT", "IF_FRAGILE"],
+                start: { x: 0, y: 3, dir: 1 },
+                grid: [
+                    [0, 0, 0, 0, 0],
+                    [0, 1, 1, 1, 0],
+                    [0, 1, 0, 1, 0],
+                    [1, 1, 2, 1, 1],
+                    [0, 0, 0, 0, 0]
+                ],
+                packages: [
+                    { id: "p1", x: 1, y: 3, type: "fragile", label: "พัสดุเปราะบาง" }
+                ],
+                goals: [
+                    { id: "g1", x: 4, y: 3, acceptType: "any", label: "จุดส่งสินค้า" }
+                ]
+            },
+            {
+                id: 6,
+                title: "ด่านตรวจช่องทางพิเศษ",
+                concept: "การประยุกต์ใช้เงื่อนไข (If Condition)",
+                desc: "ข้างหน้ามี 'ด่านตรวจอัตโนมัติ (ช่องสีฟ้า)' รถต้องเปิดไฟสัญญาณผ่านด่านก่อนจึงจะวิ่งผ่านได้",
+                conditionText: "ปลดล็อกคำสั่ง: ถ้าอยู่หน้าด่านตรวจ -> เปิดสัญญาณผ่านด่าน",
+                hint: "เมื่อรถเดินมาถึงช่องก่อนหน้าด่านตรวจ (ช่องสีฟ้า) ให้ใช้บล็อก 'ถ้าอยู่หน้าด่านตรวจ' แล้วใส่คำสั่ง 'ส่งสัญญาณผ่านด่าน' ไว้ข้างใน ก่อนสั่งเดินหน้าต่อ",
+                gridSize: 5,
+                maxBlocksForStar: 7,
+                maxAttemptsForStar: 3,
+                allowedBlocks: ["MOVE", "TURN_LEFT", "TURN_RIGHT", "PICKUP", "DROP", "REPEAT", "IF_GATE", "SIGNAL_GATE"],
+                start: { x: 0, y: 2, dir: 1 },
+                grid: [
+                    [0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0],
+                    [1, 1, 3, 1, 1],
+                    [0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0]
+                ],
+                packages: [
+                    { id: "p1", x: 0, y: 2, type: "normal", label: "พัสดุทั่วไป" }
+                ],
+                goals: [
+                    { id: "g1", x: 4, y: 2, acceptType: "any", label: "จุดส่งสินค้า" }
+                ]
+            },
+            {
+                id: 7,
+                title: "ศูนย์คัดแยกสองเส้นทาง",
+                concept: "การตัดสินใจสองทาง (If - Else)",
+                desc: "รับพัสดุที่จุดคัดแยก แล้วใช้ 'ถ้า...ไม่งั้น (If-Else)' แยกส่งกล่องด่วนพิเศษไปช่องสีแดง หรือกล่องทั่วไปไปช่องสีเขียว",
+                conditionText: "ปลดล็อกคำสั่ง: ถ้าถือพัสดุด่วนพิเศษ... ไม่งั้น...",
+                hint: "เดินหน้า 1 ช่องแล้ว 'รับพัสดุ' จากนั้นใช้บล็อก 'ถ้าถือพัสดุด่วนพิเศษ / ไม่งั้น' โดยในช่อง 'ถ้าใช่' ให้เลี้ยวซ้ายขึ้นไปส่งจุดสีแดง และในช่อง 'ไม่งั้น' ให้เลี้ยวขวาลงไปส่งจุดสีเขียว",
+                gridSize: 5,
+                maxBlocksForStar: 9,
+                maxAttemptsForStar: 3,
+                allowedBlocks: ["MOVE", "TURN_LEFT", "TURN_RIGHT", "PICKUP", "DROP", "IF_EXPRESS_ELSE"],
+                start: { x: 0, y: 2, dir: 1 },
+                grid: [
+                    [0, 0, 1, 0, 0],
+                    [0, 0, 1, 0, 0],
+                    [1, 1, 1, 0, 0],
+                    [0, 0, 1, 0, 0],
+                    [0, 0, 1, 0, 0]
+                ],
+                packages: [
+                    { id: "p1", x: 2, y: 2, type: "express", label: "พัสดุด่วนพิเศษ" }
+                ],
+                goals: [
+                    { id: "g1", x: 2, y: 0, acceptType: "express", label: "จุดส่งด่วนพิเศษ (สีแดง)" },
+                    { id: "g2", x: 2, y: 4, acceptType: "normal", label: "จุดส่งทั่วไป (สีเขียว)" }
+                ]
+            }
+        ];
+
+        // Apply overrides cleanly for Level 4
+        LEVELS.forEach(lvl => {
+            if (lvl.customOverride) {
+                lvl.grid = lvl.gridOverride;
+                lvl.start = lvl.startOverride;
+            }
+        });
+
+        /**
+         * ============================================================================
+         * 2. BLOCK METADATA DEFINITIONS
+         * ============================================================================
+         */
+        const BLOCK_DEFS = {
+            MOVE: {
+                type: "MOVE",
+                label: "เดินหน้า 1 ช่อง",
+                icon: "fa-arrow-up",
+                colorClass: "bg-blue-600 hover:bg-blue-700 text-white border-blue-700",
+                badgeClass: "bg-blue-50 border-blue-200 text-blue-900",
+                iconBg: "bg-blue-600 text-white",
+                category: "basic",
+                isContainer: false
+            },
+            TURN_LEFT: {
+                type: "TURN_LEFT",
+                label: "เลี้ยวซ้าย",
+                icon: "fa-arrow-turn-up fa-flip-horizontal",
+                colorClass: "bg-sky-600 hover:bg-sky-700 text-white border-sky-700",
+                badgeClass: "bg-sky-50 border-sky-200 text-sky-900",
+                iconBg: "bg-sky-600 text-white",
+                category: "basic",
+                isContainer: false
+            },
+            TURN_RIGHT: {
+                type: "TURN_RIGHT",
+                label: "เลี้ยวขวา",
+                icon: "fa-arrow-turn-up",
+                colorClass: "bg-sky-600 hover:bg-sky-700 text-white border-sky-700",
+                badgeClass: "bg-sky-50 border-sky-200 text-sky-900",
+                iconBg: "bg-sky-600 text-white",
+                category: "basic",
+                isContainer: false
+            },
+            PICKUP: {
+                type: "PICKUP",
+                label: "รับพัสดุ",
+                icon: "fa-box-open",
+                colorClass: "bg-amber-500 hover:bg-amber-600 text-white border-amber-600",
+                badgeClass: "bg-amber-50 border-amber-200 text-amber-900",
+                iconBg: "bg-amber-500 text-white",
+                category: "basic",
+                isContainer: false
+            },
+            DROP: {
+                type: "DROP",
+                label: "ส่งพัสดุ",
+                icon: "fa-flag-checkered",
+                colorClass: "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700",
+                badgeClass: "bg-emerald-50 border-emerald-200 text-emerald-900",
+                iconBg: "bg-emerald-600 text-white",
+                category: "basic",
+                isContainer: false
+            },
+            SIGNAL_GATE: {
+                type: "SIGNAL_GATE",
+                label: "เปิดสัญญาณด่านตรวจ",
+                icon: "fa-tower-broadcast",
+                colorClass: "bg-cyan-600 hover:bg-cyan-700 text-white border-cyan-700",
+                badgeClass: "bg-cyan-50 border-cyan-200 text-cyan-900",
+                iconBg: "bg-cyan-600 text-white",
+                category: "basic",
+                isContainer: false
+            },
+            REPEAT: {
+                type: "REPEAT",
+                label: "ทำซ้ำ (Repeat)",
+                icon: "fa-repeat",
+                colorClass: "bg-purple-600 hover:bg-purple-700 text-white border-purple-700",
+                badgeClass: "bg-purple-50 border-purple-300 text-purple-950",
+                iconBg: "bg-purple-600 text-white",
+                category: "logic",
+                isContainer: true,
+                hasElse: false
+            },
+            IF_FRAGILE: {
+                type: "IF_FRAGILE",
+                label: "ถ้าถือพัสดุเปราะบาง",
+                icon: "fa-wine-glass",
+                colorClass: "bg-rose-600 hover:bg-rose-700 text-white border-rose-700",
+                badgeClass: "bg-rose-50 border-rose-300 text-rose-950",
+                iconBg: "bg-rose-600 text-white",
+                category: "logic",
+                isContainer: true,
+                hasElse: false
+            },
+            IF_GATE: {
+                type: "IF_GATE",
+                label: "ถ้าอยู่หน้าด่านตรวจ",
+                icon: "fa-shield-halved",
+                colorClass: "bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700",
+                badgeClass: "bg-indigo-50 border-indigo-300 text-indigo-950",
+                iconBg: "bg-indigo-600 text-white",
+                category: "logic",
+                isContainer: true,
+                hasElse: false
+            },
+            IF_EXPRESS_ELSE: {
+                type: "IF_EXPRESS_ELSE",
+                label: "ถ้าถือพัสดุด่วนพิเศษ / ไม่งั้น",
+                icon: "fa-code-branch",
+                colorClass: "bg-fuchsia-600 hover:bg-fuchsia-700 text-white border-fuchsia-700",
+                badgeClass: "bg-fuchsia-50 border-fuchsia-300 text-fuchsia-950",
+                iconBg: "bg-fuchsia-600 text-white",
+                category: "logic",
+                isContainer: true,
+                hasElse: true
+            }
+        };
+
+        /**
+         * ============================================================================
+         * 3. GAME STATE & ANALYTICS STORAGE
+         * ============================================================================
+         */
+        let currentLevelIdx = 0;
+        let program = []; // Array of block objects { id, type, count?, children?: [], elseChildren?: [] }
+        let insertionTarget = null; // null = root, or { blockId, branch: 'children' | 'elseChildren' }
+        let isRunning = false;
+        let runSpeed = 1; // 1x or 2x
+        let soundEnabled = true;
+        let activeBlockId = null;
+
+        // Live Simulation Entities
+        let simState = {
+            x: 0,
+            y: 0,
+            dir: 1,
+            cargo: null, // { id, type, label, damaged: false }
+            remainingPackages: [],
+            deliveredPackages: [],
+            gateOpen: false,
+            hitWallCount: 0,
+            hitWallSteps: [],
+            roughRoadDamaged: false,
+            blockedByGate: false,
+            wrongDropGoal: false,
+            droppedOnEmpty: false,
+            pickedNothing: false,
+            alreadyCarrying: false
+        };
+
+        // Persistent Student/Teacher Analytics (saved in localStorage)
+        let analytics = loadAnalytics();
+
+        function loadAnalytics() {
+            try {
+                const raw = localStorage.getItem("logic_express_analytics_v1");
+                if (raw) return JSON.parse(raw);
+            } catch (e) { /* ignore storage errors */ }
+            return {
+                levels: {} // key: levelId -> { attempts, completed, stars, bestBlocks, errorHistory: [] }
+            };
+        }
+
+        function saveAnalytics() {
+            try {
+                localStorage.setItem("logic_express_analytics_v1", JSON.stringify(analytics));
+            } catch (e) { /* ignore */ }
+        }
+
+        function getLevelStats(levelId) {
+            if (!analytics.levels[levelId]) {
+                analytics.levels[levelId] = {
+                    attempts: 0,
+                    completed: false,
+                    stars: 0,
+                    bestBlocks: null,
+                    errorHistory: []
+                };
+            }
+            return analytics.levels[levelId];
+        }
+
+        /**
+         * ============================================================================
+         * 4. PROCEDURAL SOUND EFFECTS (TONE.JS - NO EXTERNAL FILES)
+         * ============================================================================
+         */
+        let synth = null;
+        function playSfx(type) {
+            if (!soundEnabled) return;
+            try {
+                if (!synth) {
+                    synth = new Tone.PolySynth(Tone.Synth).toDestination();
+                    synth.volume.value = -10;
+                }
+                if (Tone.context.state !== 'running') {
+                    Tone.start();
+                }
+                const now = Tone.now();
+                if (type === 'click') synth.triggerAttackRelease("C5", "32n", now);
+                else if (type === 'delete') synth.triggerAttackRelease("A3", "32n", now);
+                else if (type === 'move') synth.triggerAttackRelease("E4", "32n", now);
+                else if (type === 'bump') synth.triggerAttackRelease(["C3", "Db3"], "16n", now);
+                else if (type === 'pickup') synth.triggerAttackRelease(["E4", "G4", "C5"], "16n", now);
+                else if (type === 'win') {
+                    synth.triggerAttackRelease("C5", "16n", now);
+                    synth.triggerAttackRelease("E5", "16n", now + 0.1);
+                    synth.triggerAttackRelease("G5", "16n", now + 0.2);
+                    synth.triggerAttackRelease("C6", "8n", now + 0.3);
+                } else if (type === 'fail') {
+                    synth.triggerAttackRelease("E4", "8n", now);
+                    synth.triggerAttackRelease("C4", "4n", now + 0.18);
+                }
+            } catch (e) { /* Audio fallback silently */ }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById("icon-sound");
+            icon.className = soundEnabled ? "fa-solid fa-volume-high" : "fa-solid fa-volume-xmark text-slate-500";
+        }
+
+        /**
+         * ============================================================================
+         * 5. INITIALIZATION & LEVEL LOADING
+         * ============================================================================
+         */
+        function init() {
+            renderLevelSelector();
+            loadLevel(0);
+        }
+
+        function renderLevelSelector() {
+            const container = document.getElementById("level-selector");
+            container.innerHTML = "";
+            LEVELS.forEach((lvl, idx) => {
+                const stats = getLevelStats(lvl.id);
+                const isActive = idx === currentLevelIdx;
+                const btn = document.createElement("button");
+                btn.onclick = () => {
+                    if (isRunning) return;
+                    playSfx('click');
+                    loadLevel(idx);
+                };
+                btn.className = `px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
+                    isActive
+                        ? "bg-blue-600 text-white shadow"
+                        : stats.completed
+                            ? "bg-emerald-950/60 text-emerald-300 hover:bg-slate-700 border border-emerald-700/40"
+                            : "text-slate-300 hover:bg-slate-700"
+                }`;
+
+                let starBadge = "";
+                if (stats.completed) {
+                    starBadge = `<span class="text-amber-400 text-[10px]"><i class="fa-solid fa-star"></i>${stats.stars}</span>`;
+                }
+                btn.innerHTML = `<span>ด่าน ${lvl.id}</span>${starBadge}`;
+                container.appendChild(btn);
+            });
+        }
+
+        function loadLevel(idx) {
+            currentLevelIdx = idx;
+            const lvl = LEVELS[idx];
+            program = [];
+            insertionTarget = null;
+            activeBlockId = null;
+
+            // Update Briefing Header
+            document.getElementById("mission-badge").textContent = `ด่านที่ ${lvl.id}/${LEVELS.length} • ${lvl.concept}`;
+            document.getElementById("mission-title").textContent = lvl.title;
+            document.getElementById("mission-desc").textContent = lvl.desc;
+            document.getElementById("target-blocks-text").textContent = `≤ ${lvl.maxBlocksForStar} บล็อก`;
+            document.getElementById("hint-modal-text").textContent = lvl.hint;
+
+            const condTag = document.getElementById("mission-condition-tag");
+            if (lvl.conditionText) {
+                condTag.classList.remove("hidden");
+                document.getElementById("mission-condition-text").textContent = lvl.conditionText;
+            } else {
+                condTag.classList.add("hidden");
+            }
+
+            updateAttemptDisplay();
+            renderLevelSelector();
+            renderPalette();
+            resetSimulationState();
+            renderWorkspace();
+            renderLegend();
+        }
+
+        function updateAttemptDisplay() {
+            const lvl = LEVELS[currentLevelIdx];
+            const stats = getLevelStats(lvl.id);
+            document.getElementById("attempt-count-text").textContent = stats.attempts;
+        }
+
+        function resetSimulationState() {
+            if (isRunning) return;
+            const lvl = LEVELS[currentLevelIdx];
+            activeBlockId = null;
+            document.getElementById("feedback-overlay").classList.add("hidden");
+
+            simState = {
+                x: lvl.start.x,
+                y: lvl.start.y,
+                dir: lvl.start.dir,
+                cargo: null,
+                remainingPackages: JSON.parse(JSON.stringify(lvl.packages)),
+                deliveredPackages: [],
+                gateOpen: false,
+                hitWallCount: 0,
+                hitWallSteps: [],
+                roughRoadDamaged: false,
+                blockedByGate: false,
+                wrongDropGoal: false,
+                droppedOnEmpty: false,
+                pickedNothing: false,
+                alreadyCarrying: false
+            };
+
+            updateCargoPill();
+            document.getElementById("live-log-text").textContent = "พร้อมรับคำสั่ง... กดเลือกบล็อกทางขวาเพื่อเริ่มต้น";
+            document.getElementById("step-counter").textContent = "0/0";
+            renderGrid();
+            renderWorkspace();
+        }
+
+        function dismissFeedbackAndReset() {
+            playSfx('click');
+            resetSimulationState();
+        }
+
+        function nextLevel() {
+            playSfx('click');
+            if (currentLevelIdx + 1 < LEVELS.length) {
+                loadLevel(currentLevelIdx + 1);
+            } else {
+                openTeacherDashboard();
+            }
+        }
+
+        function setSpeed(speed) {
+            runSpeed = speed;
+            document.getElementById("speed-1").className = speed === 1
+                ? "px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-blue-600 shadow-sm transition"
+                : "px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition";
+            document.getElementById("speed-2").className = speed === 2
+                ? "px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-blue-600 shadow-sm transition"
+                : "px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition";
+        }
+
+        /**
+         * ============================================================================
+         * 6. RENDERING: GRID MAP, PALETTE & WORKSPACE
+         * ============================================================================
+         */
+        function renderLegend() {
+            const lvl = LEVELS[currentLevelIdx];
+            const legend = document.getElementById("map-legend");
+            let items = [
+                `<span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-300 inline-block border border-slate-400"></span> ถนนปกติ</span>`,
+                `<span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-700 inline-block"></span> อาคาร/กำแพง</span>`
+            ];
+            if (lvl.grid.some(r => r.includes(2))) {
+                items.push(`<span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-200 border border-amber-400 inline-block"></span> ทางขรุขระ (ห้ามพัสดุเปราะบาง)</span>`);
+            }
+            if (lvl.grid.some(r => r.includes(3))) {
+                items.push(`<span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-cyan-500 inline-block"></span> ด่านตรวจอัตโนมัติ</span>`);
+            }
+            legend.innerHTML = items.join("");
+        }
+
+        function renderGrid(bumpTruck = false) {
+            const lvl = LEVELS[currentLevelIdx];
+            const gridEl = document.getElementById("game-grid");
+            gridEl.style.gridTemplateColumns = `repeat(${lvl.gridSize}, minmax(0, 1fr))`;
+            gridEl.style.gridTemplateRows = `repeat(${lvl.gridSize}, minmax(0, 1fr))`;
+            gridEl.innerHTML = "";
+
+            for (let y = 0; y < lvl.gridSize; y++) {
+                for (let x = 0; x < lvl.gridSize; x++) {
+                    const tileType = lvl.grid[y][x];
+                    const cell = document.createElement("div");
+                    cell.className = "rounded-xl relative flex items-center justify-center overflow-hidden transition-all border ";
+
+                    if (tileType === 0) {
+                        cell.className += "tile-wall border-slate-800";
+                    } else if (tileType === 2) {
+                        cell.className += "tile-rough border-amber-400";
+                    } else if (tileType === 3) {
+                        cell.className += simState.gateOpen
+                            ? "bg-cyan-100 border-cyan-400"
+                            : "bg-cyan-600 border-cyan-800 text-white";
+                    } else {
+                        cell.className += "tile-road border-slate-300";
+                    }
+
+                    // Render Gate Status Icon if Tile == 3
+                    if (tileType === 3) {
+                        const gateBadge = document.createElement("div");
+                        gateBadge.className = "flex flex-col items-center justify-center text-[10px] font-bold z-0";
+                        gateBadge.innerHTML = simState.gateOpen
+                            ? `<i class="fa-solid fa-lock-open text-cyan-700 text-sm"></i><span class="text-cyan-800">เปิดแล้ว</span>`
+                            : `<i class="fa-solid fa-lock text-white text-sm"></i><span>ด่านตรวจ</span>`;
+                        cell.appendChild(gateBadge);
+                    }
+
+                    // Render Goal Marker if present
+                    const goal = lvl.goals.find(g => g.x === x && g.y === y);
+                    if (goal) {
+                        const goalEl = document.createElement("div");
+                        let goalColor = "bg-emerald-500/20 border-emerald-500 text-emerald-700";
+                        if (goal.acceptType === "express") goalColor = "bg-rose-500/20 border-rose-500 text-rose-700";
+                        else if (goal.acceptType === "normal" && lvl.goals.length > 1) goalColor = "bg-emerald-500/20 border-emerald-500 text-emerald-700";
+
+                        goalEl.className = `absolute inset-1 rounded-lg border-2 border-dashed ${goalColor} flex flex-col items-center justify-center z-0`;
+                        goalEl.innerHTML = `
+                            <i class="fa-solid fa-location-dot text-sm"></i>
+                            <span class="text-[9px] font-bold leading-tight text-center px-0.5">${goal.acceptType === 'express' ? 'ส่งด่วน' : 'จุดส่ง'}</span>
+                        `;
+                        cell.appendChild(goalEl);
+                    }
+
+                    // Render Package on Ground if present
+                    const pkg = simState.remainingPackages.find(p => p.x === x && p.y === y);
+                    if (pkg) {
+                        const pkgEl = document.createElement("div");
+                        let pkgStyle = "bg-amber-500 text-white border-amber-700";
+                        let pkgIcon = "fa-box";
+                        let tag = "ทั่วไป";
+                        if (pkg.type === "fragile") {
+                            pkgStyle = "bg-rose-500 text-white border-rose-700";
+                            pkgIcon = "fa-wine-glass";
+                            tag = "เปราะบาง";
+                        } else if (pkg.type === "express") {
+                            pkgStyle = "bg-fuchsia-600 text-white border-fuchsia-800";
+                            pkgIcon = "fa-bolt";
+                            tag = "ด่วนพิเศษ";
+                        }
+                        pkgEl.className = `z-10 px-1.5 py-1 rounded-lg border-b-2 shadow-md flex flex-col items-center ${pkgStyle}`;
+                        pkgEl.innerHTML = `
+                            <i class="fa-solid ${pkgIcon} text-xs"></i>
+                            <span class="text-[8px] font-bold leading-none mt-0.5">${tag}</span>
+                        `;
+                        cell.appendChild(pkgEl);
+                    }
+
+                    // Render Delivery Truck if at (x, y)
+                    if (simState.x === x && simState.y === y) {
+                        const truckWrap = document.createElement("div");
+                        const rotationDeg = [ -90, 0, 90, 180 ][simState.dir];
+                        truckWrap.className = `z-20 w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-blue-600 border-2 border-white shadow-lg flex items-center justify-center relative transition-transform duration-200 ${bumpTruck ? 'animate-bump ring-4 ring-rose-500' : ''}`;
+
+                        // Cargo badge on truck
+                        let cargoDot = "";
+                        if (simState.cargo) {
+                            const dotColor = simState.cargo.damaged
+                                ? "bg-slate-800 text-rose-400"
+                                : simState.cargo.type === "fragile"
+                                    ? "bg-rose-500 text-white"
+                                    : simState.cargo.type === "express"
+                                        ? "bg-fuchsia-500 text-white"
+                                        : "bg-amber-400 text-slate-900";
+                            cargoDot = `<span class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full ${dotColor} border border-white flex items-center justify-center text-[10px] shadow"><i class="fa-solid fa-box"></i></span>`;
+                        }
+
+                        truckWrap.innerHTML = `
+                            <div style="transform: rotate(${rotationDeg}deg);" class="transition-transform duration-200 flex items-center justify-center text-white">
+                                <i class="fa-solid fa-truck text-lg sm:text-xl"></i>
+                            </div>
+                            ${cargoDot}
+                        `;
+                        cell.appendChild(truckWrap);
+                    }
+
+                    gridEl.appendChild(cell);
+                }
+            }
+        }
+
+        function updateCargoPill() {
+            const textEl = document.getElementById("truck-cargo-text");
+            const pill = document.getElementById("truck-status-pill");
+            if (!simState.cargo) {
+                textEl.textContent = "ในรถ: ว่างเปล่า";
+                pill.className = "text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-medium flex items-center gap-1.5";
+            } else if (simState.cargo.damaged) {
+                textEl.textContent = `ในรถ: ${simState.cargo.label} (เสียหาย!)`;
+                pill.className = "text-xs px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 font-bold flex items-center gap-1.5";
+            } else {
+                textEl.textContent = `ในรถ: ${simState.cargo.label}`;
+                pill.className = "text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center gap-1.5";
+            }
+        }
+
+        function renderPalette() {
+            const lvl = LEVELS[currentLevelIdx];
+            const basicEl = document.getElementById("palette-basic");
+            const logicEl = document.getElementById("palette-logic");
+            const logicSection = document.getElementById("palette-logic-section");
+
+            basicEl.innerHTML = "";
+            logicEl.innerHTML = "";
+            let hasLogicBlocks = false;
+
+            lvl.allowedBlocks.forEach(type => {
+                const def = BLOCK_DEFS[type];
+                if (!def) return;
+
+                const btn = document.createElement("button");
+                btn.onclick = () => addBlockToProgram(type);
+                btn.className = `w-full px-3 py-2.5 rounded-xl border-b-2 font-semibold text-xs sm:text-sm flex items-center gap-2.5 shadow-sm active:scale-95 transition text-left ${def.colorClass}`;
+                btn.innerHTML = `
+                    <span class="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                        <i class="fa-solid ${def.icon}"></i>
+                    </span>
+                    <span class="truncate">${def.label}</span>
+                `;
+
+                if (def.category === "basic") {
+                    basicEl.appendChild(btn);
+                } else {
+                    hasLogicBlocks = true;
+                    logicEl.appendChild(btn);
+                }
+            });
+
+            if (hasLogicBlocks) {
+                logicSection.classList.remove("hidden");
+            } else {
+                logicSection.classList.add("hidden");
+            }
+        }
+
+        /**
+         * ============================================================================
+         * 7. WORKSPACE PROGRAM MANIPULATION (ADD, NEST, REORDER, DELETE)
+         * ============================================================================
+         */
+        function generateId() {
+            return "blk_" + Math.random().toString(36).substring(2, 9);
+        }
+
+        function countTotalBlocks(list) {
+            let count = 0;
+            for (const b of list) {
+                count += 1;
+                if (b.children) count += countTotalBlocks(b.children);
+                if (b.elseChildren) count += countTotalBlocks(b.elseChildren);
+            }
+            return count;
+        }
+
+        function findBlockById(list, id) {
+            for (const b of list) {
+                if (b.id === id) return b;
+                if (b.children) {
+                    const found = findBlockById(b.children, id);
+                    if (found) return found;
+                }
+                if (b.elseChildren) {
+                    const found = findBlockById(b.elseChildren, id);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+
+        function setInsertionTarget(target) {
+            insertionTarget = target;
+            const labelEl = document.getElementById("target-scope-label");
+            const resetBtn = document.getElementById("btn-reset-scope");
+
+            if (!target) {
+                labelEl.textContent = "รายการหลัก (Main)";
+                resetBtn.classList.add("hidden");
+            } else {
+                const parentBlock = findBlockById(program, target.blockId);
+                if (!parentBlock) {
+                    insertionTarget = null;
+                    labelEl.textContent = "รายการหลัก (Main)";
+                    resetBtn.classList.add("hidden");
+                } else {
+                    const def = BLOCK_DEFS[parentBlock.type];
+                    const branchText = target.branch === "elseChildren" ? " [ส่วนไม่งั้น]" : " [ด้านในบล็อก]";
+                    labelEl.textContent = `${def.label}${branchText}`;
+                    resetBtn.classList.remove("hidden");
+                }
+            }
+            renderWorkspace();
+        }
+
+        function addBlockToProgram(type) {
+            if (isRunning) return;
+            playSfx('click');
+
+            const def = BLOCK_DEFS[type];
+            const newBlock = {
+                id: generateId(),
+                type: type
+            };
+
+            if (def.isContainer) {
+                newBlock.children = [];
+                if (type === "REPEAT") newBlock.count = 3;
+                if (def.hasElse) newBlock.elseChildren = [];
+            }
+
+            // Insert into active target scope or root
+            if (insertionTarget) {
+                const parent = findBlockById(program, insertionTarget.blockId);
+                if (parent && parent[insertionTarget.branch]) {
+                    parent[insertionTarget.branch].push(newBlock);
+                } else {
+                    program.push(newBlock);
+                }
+            } else {
+                program.push(newBlock);
+            }
+
+            // Automatically focus inside newly added container block for smooth UX
+            if (def.isContainer) {
+                setInsertionTarget({ blockId: newBlock.id, branch: "children" });
+            } else {
+                renderWorkspace();
+            }
+        }
+
+        function removeBlock(id, list = program) {
+            if (isRunning) return;
+            playSfx('delete');
+            for (let i = 0; i < list.length; i++) {
+                if (list[i].id === id) {
+                    list.splice(i, 1);
+                    if (insertionTarget && insertionTarget.blockId === id) {
+                        setInsertionTarget(null);
+                    } else {
+                        renderWorkspace();
+                    }
+                    return true;
+                }
+                if (list[i].children && removeBlock(id, list[i].children)) return true;
+                if (list[i].elseChildren && removeBlock(id, list[i].elseChildren)) return true;
+            }
+            return false;
+        }
+
+        function moveBlock(id, direction, list = program) {
+            if (isRunning) return;
+            for (let i = 0; i < list.length; i++) {
+                if (list[i].id === id) {
+                    const targetIdx = i + direction;
+                    if (targetIdx >= 0 && targetIdx < list.length) {
+                        playSfx('click');
+                        const temp = list[i];
+                        list[i] = list[targetIdx];
+                        list[targetIdx] = temp;
+                        renderWorkspace();
+                    }
+                    return true;
+                }
+                if (list[i].children && moveBlock(id, direction, list[i].children)) return true;
+                if (list[i].elseChildren && moveBlock(id, direction, list[i].elseChildren)) return true;
+            }
+            return false;
+        }
+
+        function updateRepeatCount(id, delta) {
+            if (isRunning) return;
+            const blk = findBlockById(program, id);
+            if (blk && blk.type === "REPEAT") {
+                playSfx('click');
+                blk.count = Math.max(2, Math.min(9, (blk.count || 3) + delta));
+                renderWorkspace();
+            }
+        }
+
+        function clearWorkspace() {
+            if (isRunning) return;
+            playSfx('delete');
+            program = [];
+            setInsertionTarget(null);
+            resetSimulationState();
+        }
+
+        function renderWorkspace() {
+            const container = document.getElementById("workspace-list");
+            const total = countTotalBlocks(program);
+            const lvl = LEVELS[currentLevelIdx];
+
+            const badge = document.getElementById("block-count-badge");
+            badge.textContent = `${total} / ${lvl.maxBlocksForStar} บล็อก`;
+            badge.className = total <= lvl.maxBlocksForStar
+                ? "text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800"
+                : "text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800";
+
+            if (program.length === 0) {
+                container.innerHTML = `
+                    <div class="h-full min-h-[220px] border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-center p-4 text-slate-400">
+                        <i class="fa-solid fa-hand-pointer text-2xl mb-2 text-slate-300"></i>
+                        <p class="text-sm font-medium text-slate-500">ยังไม่มีบล็อกคำสั่ง</p>
+                        <p class="text-xs mt-1">คลิกเลือกบล็อกคำสั่งจากคอลัมน์ด้านขวาเพื่อเรียงลำดับการทำงาน</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = "";
+            renderBlockList(program, container, 0);
+        }
+
+        function renderBlockList(list, parentEl, depth) {
+            list.forEach((blk, index) => {
+                const def = BLOCK_DEFS[blk.type];
+                const isRunningThis = activeBlockId === blk.id;
+
+                const wrapper = document.createElement("div");
+                wrapper.className = `rounded-xl border transition-all ${def.badgeClass} ${isRunningThis ? 'active-block-highlight shadow-md' : 'shadow-xs'}`;
+
+                // Header row of the block
+                const header = document.createElement("div");
+                header.className = "px-2.5 py-2 flex items-center justify-between gap-2";
+
+                // Left info: Step number + Icon + Label + Repeat Controls
+                const left = document.createElement("div");
+                left.className = "flex items-center gap-2 min-w-0";
+                left.innerHTML = `
+                    <span class="text-[11px] font-mono-code font-bold opacity-50 w-4">${index + 1}.</span>
+                    <span class="w-6 h-6 rounded-lg ${def.iconBg} flex items-center justify-center text-xs shrink-0">
+                        <i class="fa-solid ${def.icon}"></i>
+                    </span>
+                    <span class="font-semibold text-xs sm:text-sm truncate">${def.label}</span>
+                `;
+
+                // Repeat counter controls
+                if (blk.type === "REPEAT") {
+                    const stepper = document.createElement("div");
+                    stepper.className = "flex items-center gap-1 bg-white/80 px-1.5 py-0.5 rounded-lg border border-purple-200 ml-1 shrink-0";
+                    stepper.innerHTML = `
+                        <button onclick="updateRepeatCount('${blk.id}', -1)" class="w-5 h-5 rounded hover:bg-purple-100 text-purple-700 font-bold text-xs">-</button>
+                        <span class="font-mono-code font-bold text-xs text-purple-900 px-1">${blk.count} รอบ</span>
+                        <button onclick="updateRepeatCount('${blk.id}', 1)" class="w-5 h-5 rounded hover:bg-purple-100 text-purple-700 font-bold text-xs">+</button>
+                    `;
+                    left.appendChild(stepper);
+                }
+
+                // Right action buttons: Move Up/Down, Delete
+                const actions = document.createElement("div");
+                actions.className = "flex items-center gap-1 shrink-0";
+                actions.innerHTML = `
+                    <button onclick="moveBlock('${blk.id}', -1)" class="w-6 h-6 rounded hover:bg-black/5 text-slate-500 text-xs" title="เลื่อนขึ้น"><i class="fa-solid fa-chevron-up"></i></button>
+                    <button onclick="moveBlock('${blk.id}', 1)" class="w-6 h-6 rounded hover:bg-black/5 text-slate-500 text-xs" title="เลื่อนลง"><i class="fa-solid fa-chevron-down"></i></button>
+                    <button onclick="removeBlock('${blk.id}')" class="w-6 h-6 rounded hover:bg-rose-500 hover:text-white text-rose-500 text-xs transition" title="ลบบล็อก"><i class="fa-solid fa-xmark"></i></button>
+                `;
+
+                header.appendChild(left);
+                header.appendChild(actions);
+                wrapper.appendChild(header);
+
+                // If Container Block (Repeat / If / If-Else), render nested drop zones
+                if (def.isContainer) {
+                    const isTargetedChildren = insertionTarget && insertionTarget.blockId === blk.id && insertionTarget.branch === "children";
+
+                    const childZone = document.createElement("div");
+                    childZone.className = `mx-2.5 mb-2.5 p-2 rounded-lg border-l-4 bg-white/80 space-y-1.5 ${
+                        isTargetedChildren ? "border-indigo-600 ring-2 ring-indigo-300" : "border-slate-300"
+                    }`;
+
+                    const zoneHeader = document.createElement("div");
+                    zoneHeader.className = "flex items-center justify-between text-[11px] mb-1";
+                    zoneHeader.innerHTML = `
+                        <span class="font-semibold text-slate-500">${def.hasElse ? 'ถ้าเงื่อนไขเป็นจริง ให้ทำ:' : 'คำสั่งด้านใน:'}</span>
+                        <button onclick="setInsertionTarget({ blockId: '${blk.id}', branch: 'children' })" class="px-2 py-0.5 rounded ${
+                            isTargetedChildren ? "bg-indigo-600 text-white font-bold" : "bg-slate-200 hover:bg-slate-300 text-slate-700"
+                        }">
+                            ${isTargetedChildren ? 'กำลังเพิ่มที่นี่ ✓' : '+ เลือกเพิ่มตรงนี้'}
+                        </button>
+                    `;
+                    childZone.appendChild(zoneHeader);
+
+                    if (blk.children && blk.children.length > 0) {
+                        renderBlockList(blk.children, childZone, depth + 1);
+                    } else {
+                        const emptySub = document.createElement("div");
+                        emptySub.className = "text-[11px] text-slate-400 italic py-1 px-2";
+                        emptySub.textContent = "(คลิก 'เลือกเพิ่มตรงนี้' แล้วกดเลือกคำสั่งด้านขวา)";
+                        childZone.appendChild(emptySub);
+                    }
+                    wrapper.appendChild(childZone);
+
+                    // Else Branch if IF_EXPRESS_ELSE
+                    if (def.hasElse) {
+                        const isTargetedElse = insertionTarget && insertionTarget.blockId === blk.id && insertionTarget.branch === "elseChildren";
+                        const elseZone = document.createElement("div");
+                        elseZone.className = `mx-2.5 mb-2.5 p-2 rounded-lg border-l-4 bg-white/80 space-y-1.5 ${
+                            isTargetedElse ? "border-fuchsia-600 ring-2 ring-fuchsia-300" : "border-slate-300"
+                        }`;
+
+                        const elseHeader = document.createElement("div");
+                        elseHeader.className = "flex items-center justify-between text-[11px] mb-1";
+                        elseHeader.innerHTML = `
+                            <span class="font-semibold text-slate-500">ไม่งั้น (Else) ให้ทำ:</span>
+                            <button onclick="setInsertionTarget({ blockId: '${blk.id}', branch: 'elseChildren' })" class="px-2 py-0.5 rounded ${
+                                isTargetedElse ? "bg-fuchsia-600 text-white font-bold" : "bg-slate-200 hover:bg-slate-300 text-slate-700"
+                            }">
+                                ${isTargetedElse ? 'กำลังเพิ่มที่นี่ ✓' : '+ เลือกเพิ่มตรงนี้'}
+                            </button>
+                        `;
+                        elseZone.appendChild(elseHeader);
+
+                        if (blk.elseChildren && blk.elseChildren.length > 0) {
+                            renderBlockList(blk.elseChildren, elseZone, depth + 1);
+                        } else {
+                            const emptyElse = document.createElement("div");
+                            emptyElse.className = "text-[11px] text-slate-400 italic py-1 px-2";
+                            emptyElse.textContent = "(คลิก 'เลือกเพิ่มตรงนี้' เพื่อใส่คำสั่งทางเลือก)";
+                            elseZone.appendChild(emptyElse);
+                        }
+                        wrapper.appendChild(elseZone);
+                    }
+                }
+
+                parentEl.appendChild(wrapper);
+            });
+        }
+
+        /**
+         * ============================================================================
+         * 8. EXECUTION ENGINE (SPEC: RUN ALL COMMANDS TO END, STOP ON WALLS, THEN SUMMARIZE)
+         * ============================================================================
+         */
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Flatten program into atomic execution steps dynamically (evaluates Repeat & If at runtime)
+        async function executeBlockList(list, stepTracker) {
+            for (const blk of list) {
+                if (!isRunning) return;
+
+                if (blk.type === "REPEAT") {
+                    const times = blk.count || 2;
+                    for (let r = 0; r < times; r++) {
+                        if (!isRunning) return;
+                        await executeBlockList(blk.children || [], stepTracker);
+                    }
+                } else if (blk.type === "IF_FRAGILE") {
+                    activeBlockId = blk.id;
+                    renderWorkspace();
+                    const cond = simState.cargo && simState.cargo.type === "fragile";
+                    document.getElementById("live-log-text").textContent = cond
+                        ? "ตรวจสอบเงื่อนไข: ถือพัสดุเปราะบางอยู่ (เป็นจริง)"
+                        : "ตรวจสอบเงื่อนไข: ไม่ได้ถือพัสดุเปราะบาง (ข้าม)";
+                    await sleep(300 / runSpeed);
+                    if (cond) {
+                        await executeBlockList(blk.children || [], stepTracker);
+                    }
+                } else if (blk.type === "IF_GATE") {
+                    activeBlockId = blk.id;
+                    renderWorkspace();
+                    const nextPos = getForwardCoords(simState.x, simState.y, simState.dir);
+                    const lvl = LEVELS[currentLevelIdx];
+                    const isFacingGate = isInsideGrid(nextPos.x, nextPos.y, lvl.gridSize) && lvl.grid[nextPos.y][nextPos.x] === 3;
+                    document.getElementById("live-log-text").textContent = isFacingGate
+                        ? "ตรวจสอบเงื่อนไข: อยู่หน้าด่านตรวจ (เป็นจริง)"
+                        : "ตรวจสอบเงื่อนไข: ไม่ได้อยู่หน้าด่านตรวจ (ข้าม)";
+                    await sleep(300 / runSpeed);
+                    if (isFacingGate) {
+                        await executeBlockList(blk.children || [], stepTracker);
+                    }
+                } else if (blk.type === "IF_EXPRESS_ELSE") {
+                    activeBlockId = blk.id;
+                    renderWorkspace();
+                    const isExpress = simState.cargo && simState.cargo.type === "express";
+                    document.getElementById("live-log-text").textContent = isExpress
+                        ? "ตรวจสอบเงื่อนไข: เป็นพัสดุด่วนพิเศษ -> ทำช่อง 'ถ้าใช่'"
+                        : "ตรวจสอบเงื่อนไข: ไม่ใช่พัสดุด่วนพิเศษ -> ทำช่อง 'ไม่งั้น'";
+                    await sleep(320 / runSpeed);
+                    if (isExpress) {
+                        await executeBlockList(blk.children || [], stepTracker);
+                    } else {
+                        await executeBlockList(blk.elseChildren || [], stepTracker);
+                    }
+                } else {
+                    // Atomic action block
+                    stepTracker.count++;
+                    activeBlockId = blk.id;
+                    renderWorkspace();
+                    await executeAtomicAction(blk.type, stepTracker.count);
+                }
+            }
+        }
+
+        function getForwardCoords(x, y, dir) {
+            if (dir === 0) return { x, y: y - 1 }; // Up
+            if (dir === 1) return { x: x + 1, y }; // Right
+            if (dir === 2) return { x, y: y + 1 }; // Down
+            return { x: x - 1, y };               // Left
+        }
+
+        function isInsideGrid(x, y, size) {
+            return x >= 0 && y >= 0 && x < size && y < size;
+        }
+
+        async function executeAtomicAction(type, stepNum) {
+            const lvl = LEVELS[currentLevelIdx];
+            const logEl = document.getElementById("live-log-text");
+            document.getElementById("step-counter").textContent = `ขั้นที่ ${stepNum}`;
+            let bumped = false;
+
+            if (type === "MOVE") {
+                const next = getForwardCoords(simState.x, simState.y, simState.dir);
+                if (!isInsideGrid(next.x, next.y, lvl.gridSize) || lvl.grid[next.y][next.x] === 0) {
+                    // SPEC: Truck stops in place at collision point and skips blocked move!
+                    simState.hitWallCount++;
+                    simState.hitWallSteps.push(stepNum);
+                    bumped = true;
+                    playSfx('bump');
+                    logEl.textContent = `ขั้นที่ ${stepNum}: ชนขอบทาง/สิ่งกีดขวาง! รถหยุดอยู่กับที่และรันคำสั่งถัดไป`;
+                } else if (lvl.grid[next.y][next.x] === 3 && !simState.gateOpen) {
+                    // Closed security gate acts as obstacle until signaled
+                    simState.hitWallCount++;
+                    simState.blockedByGate = true;
+                    bumped = true;
+                    playSfx('bump');
+                    logEl.textContent = `ขั้นที่ ${stepNum}: ติดด่านตรวจที่ยังไม่เปิดสัญญาณ! รถหยุดอยู่กับที่`;
+                } else {
+                    simState.x = next.x;
+                    simState.y = next.y;
+                    playSfx('move');
+                    logEl.textContent = `ขั้นที่ ${stepNum}: เดินหน้าไปยังช่อง (${simState.x + 1}, ${simState.y + 1})`;
+
+                    // Check rough road damage for fragile packages
+                    if (lvl.grid[simState.y][simState.x] === 2 && simState.cargo && simState.cargo.type === "fragile") {
+                        simState.cargo.damaged = true;
+                        simState.roughRoadDamaged = true;
+                        updateCargoPill();
+                        logEl.textContent = `ขั้นที่ ${stepNum}: พัสดุเปราะบางกระแทกทางขรุขระจนเสียหาย!`;
+                    }
+                }
+            } else if (type === "TURN_LEFT") {
+                simState.dir = (simState.dir + 3) % 4;
+                playSfx('move');
+                logEl.textContent = `ขั้นที่ ${stepNum}: เลี้ยวซ้าย`;
+            } else if (type === "TURN_RIGHT") {
+                simState.dir = (simState.dir + 1) % 4;
+                playSfx('move');
+                logEl.textContent = `ขั้นที่ ${stepNum}: เลี้ยวขวา`;
+            } else if (type === "PICKUP") {
+                const pkgIdx = simState.remainingPackages.findIndex(p => p.x === simState.x && p.y === simState.y);
+                if (pkgIdx !== -1 && !simState.cargo) {
+                    const picked = simState.remainingPackages.splice(pkgIdx, 1)[0];
+                    simState.cargo = { ...picked, damaged: false };
+                    updateCargoPill();
+                    playSfx('pickup');
+                    logEl.textContent = `ขั้นที่ ${stepNum}: รับ '${picked.label}' ขึ้นรถเรียบร้อย`;
+                } else if (simState.cargo) {
+                    simState.alreadyCarrying = true;
+                    logEl.textContent = `ขั้นที่ ${stepNum}: รถบรรทุกพัสดุเต็มอยู่แล้ว ไม่สามารถรับซ้อนได้`;
+                } else {
+                    simState.pickedNothing = true;
+                    logEl.textContent = `ขั้นที่ ${stepNum}: สั่ง 'รับพัสดุ' แต่ช่องนี้ไม่มีพัสดุวางอยู่`;
+                }
+            } else if (type === "DROP") {
+                if (!simState.cargo) {
+                    simState.droppedOnEmpty = true;
+                    logEl.textContent = `ขั้นที่ ${stepNum}: สั่ง 'ส่งพัสดุ' แต่ในรถไม่มีพัสดุอยู่`;
+                } else {
+                    const goal = lvl.goals.find(g => g.x === simState.x && g.y === simState.y);
+                    if (goal) {
+                        const typeMatches = goal.acceptType === "any" || goal.acceptType === simState.cargo.type;
+                        if (!typeMatches) {
+                            simState.wrongDropGoal = true;
+                        }
+                        simState.deliveredPackages.push({
+                            ...simState.cargo,
+                            goalId: goal.id,
+                            goalLabel: goal.label,
+                            correctGoal: typeMatches
+                        });
+                        playSfx('pickup');
+                        logEl.textContent = `ขั้นที่ ${stepNum}: ส่ง '${simState.cargo.label}' ลงที่ '${goal.label}'`;
+                        simState.cargo = null;
+                        updateCargoPill();
+                    } else {
+                        simState.droppedOnEmpty = true;
+                        logEl.textContent = `ขั้นที่ ${stepNum}: จุดนี้ไม่ใช่จุดส่งสินค้า ไม่สามารถวางพัสดุได้`;
+                    }
+                }
+            } else if (type === "SIGNAL_GATE") {
+                const next = getForwardCoords(simState.x, simState.y, simState.dir);
+                if (isInsideGrid(next.x, next.y, lvl.gridSize) && lvl.grid[next.y][next.x] === 3) {
+                    simState.gateOpen = true;
+                    playSfx('pickup');
+                    logEl.textContent = `ขั้นที่ ${stepNum}: ส่งสัญญาณเปิดด่านตรวจสำเร็จ!`;
+                } else {
+                    logEl.textContent = `ขั้นที่ ${stepNum}: ส่งสัญญาณแต่ด้านหน้าไม่ใช่ด่านตรวจ`;
+                }
+            }
+
+            renderGrid(bumped);
+            await sleep(480 / runSpeed);
+        }
+
+        async function runProgram() {
+            if (isRunning) return;
+            if (program.length === 0) {
+                document.getElementById("live-log-text").textContent = "⚠️ กรุณาเพิ่มบล็อกคำสั่งอย่างน้อย 1 บล็อกก่อนกดรันครับ";
+                playSfx('bump');
+                return;
+            }
+
+            // Reset board first if not fresh
+            resetSimulationState();
+
+            isRunning = true;
+            const btnRun = document.getElementById("btn-run");
+            btnRun.disabled = true;
+            btnRun.classList.add("opacity-60", "cursor-not-allowed");
+            document.getElementById("text-run").textContent = "กำลังรันคำสั่ง...";
+
+            const lvl = LEVELS[currentLevelIdx];
+            const stats = getLevelStats(lvl.id);
+            stats.attempts += 1;
+            updateAttemptDisplay();
+
+            const stepTracker = { count: 0 };
+            await executeBlockList(program, stepTracker);
+
+            activeBlockId = null;
+            renderWorkspace();
+            isRunning = false;
+            btnRun.disabled = false;
+            btnRun.classList.remove("opacity-60", "cursor-not-allowed");
+            document.getElementById("text-run").textContent = "รันคำสั่ง (Run)";
+
+            // Evaluate end-of-run result and display diagnostic card
+            evaluateEndOfRun();
+        }
+
+        /**
+         * ============================================================================
+         * 9. DIAGNOSTIC FEEDBACK & STAR EVALUATION (END OF RUN)
+         * ============================================================================
+         */
+        function evaluateEndOfRun() {
+            const lvl = LEVELS[currentLevelIdx];
+            const stats = getLevelStats(lvl.id);
+            const totalBlocks = countTotalBlocks(program);
+
+            const totalRequired = lvl.packages.length;
+            const validDeliveries = simState.deliveredPackages.filter(d => !d.damaged && d.correctGoal);
+            const isSuccess = validDeliveries.length === totalRequired && simState.remainingPackages.length === 0 && !simState.cargo;
+
+            const overlay = document.getElementById("feedback-overlay");
+            const iconWrap = document.getElementById("fb-icon-wrap");
+            const titleEl = document.getElementById("fb-title");
+            const starsEl = document.getElementById("fb-stars");
+            const msgEl = document.getElementById("fb-message");
+            const checklistEl = document.getElementById("fb-checklist");
+            const nextBtn = document.getElementById("fb-btn-next");
+
+            overlay.classList.remove("hidden");
+
+            if (isSuccess) {
+                playSfx('win');
+                // Calculate 1 to 3 Stars
+                let earnedStars = 1; // Base star for completing mission
+                const passBlockLimit = totalBlocks <= lvl.maxBlocksForStar;
+                const passAttemptLimit = stats.attempts <= lvl.maxAttemptsForStar;
+
+                // Level 3 & 4 also verify that REPEAT block was actually utilized for efficiency star
+                const usesRepeat = JSON.stringify(program).includes('"REPEAT"');
+                const efficiencyEarned = (lvl.id === 3 || lvl.id === 4)
+                    ? (passBlockLimit && usesRepeat)
+                    : passBlockLimit;
+
+                if (efficiencyEarned) earnedStars++;
+                if (passAttemptLimit) earnedStars++;
+
+                // Save best stats
+                stats.completed = true;
+                stats.stars = Math.max(stats.stars, earnedStars);
+                if (stats.bestBlocks === null || totalBlocks < stats.bestBlocks) {
+                    stats.bestBlocks = totalBlocks;
+                }
+                saveAnalytics();
+                renderLevelSelector();
+
+                iconWrap.className = "w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center text-2xl bg-emerald-100 text-emerald-600";
+                iconWrap.innerHTML = `<i class="fa-solid fa-trophy"></i>`;
+                titleEl.textContent = "ภารกิจสำเร็จยอดเยี่ยม!";
+
+                starsEl.classList.remove("hidden");
+                starsEl.innerHTML = [1, 2, 3].map(s =>
+                    s <= earnedStars
+                        ? `<i class="fa-solid fa-star text-amber-400 drop-shadow-sm"></i>`
+                        : `<i class="fa-regular fa-star text-slate-300"></i>`
+                ).join("");
+
+                let feedbackMsg = `คุณวางแผนส่งพัสดุถึงจุดหมายได้ครบถ้วนโดยใช้ทั้งหมด <strong>${totalBlocks} บล็อก</strong>`;
+                if (!efficiencyEarned) {
+                    feedbackMsg += `<br><span class="text-amber-700 text-xs mt-1 block">💡 เคล็ดลับเพิ่มดาว: ลองย่อคำสั่งให้ไม่เกิน ${lvl.maxBlocksForStar} บล็อก${(lvl.id === 3 || lvl.id === 4) ? ' โดยใช้คำสั่ง ทำซ้ำ (Repeat)' : ''}</span>`;
+                }
+                msgEl.innerHTML = feedbackMsg;
+
+                checklistEl.innerHTML = `
+                    <div class="flex items-center justify-between text-emerald-700 font-medium">
+                        <span><i class="fa-solid fa-circle-check mr-1.5"></i>ส่งพัสดุครบตามเงื่อนไข</span>
+                        <span>+1 ดาว</span>
+                    </div>
+                    <div class="flex items-center justify-between ${efficiencyEarned ? 'text-emerald-700 font-medium' : 'text-slate-400'}">
+                        <span><i class="fa-solid ${efficiencyEarned ? 'fa-circle-check' : 'fa-circle'} mr-1.5"></i>ความกระชับ (≤ ${lvl.maxBlocksForStar} บล็อก)</span>
+                        <span>${efficiencyEarned ? '+1 ดาว' : '0 ดาว'}</span>
+                    </div>
+                    <div class="flex items-center justify-between ${passAttemptLimit ? 'text-emerald-700 font-medium' : 'text-slate-400'}">
+                        <span><i class="fa-solid ${passAttemptLimit ? 'fa-circle-check' : 'fa-circle'} mr-1.5"></i>ความแม่นยำ (รันไม่เกิน ${lvl.maxAttemptsForStar} ครั้ง)</span>
+                        <span>${passAttemptLimit ? '+1 ดาว' : '0 ดาว'}</span>
+                    </div>
+                `;
+
+                nextBtn.classList.remove("hidden");
+                nextBtn.querySelector("span").textContent = currentLevelIdx + 1 < LEVELS.length ? "ด่านถัดไป" : "ดูสรุปผลทั้งหมด";
+
+            } else {
+                playSfx('fail');
+                starsEl.classList.add("hidden");
+                nextBtn.classList.add("hidden");
+
+                iconWrap.className = "w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center text-2xl bg-amber-100 text-amber-600";
+                iconWrap.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart"></i>`;
+                titleEl.textContent = "รันจบสายแล้ว แต่ภารกิจยังไม่สำเร็จ";
+
+                // Generate specific, actionable diagnostic reason
+                let reason = "";
+                let errorCategory = "ลำดับคำสั่งยังไม่ตรงจุด";
+
+                if (simState.roughRoadDamaged) {
+                    reason = "<strong>พัสดุเปราะบางเสียหายระหว่างทาง!</strong> เพราะรถวิ่งผ่านพื้นถนนขรุขระ (ช่องสีเหลือง) ลองใช้เงื่อนไข <em>'ถ้าถือพัสดุเปราะบาง'</em> เพื่อบังคับรถเลี้ยวอ้อมไปทางเรียบด้านบนครับ";
+                    errorCategory = "ฝ่าเงื่อนไขทางขรุขระ";
+                } else if (simState.wrongDropGoal) {
+                    reason = "<strong>นำพัสดุไปส่งผิดจุดหมาย!</strong> กล่องด่วนพิเศษต้องส่งที่จุดสีแดง ส่วนกล่องทั่วไปต้องส่งที่จุดสีเขียว ลองตรวจเช็กทิศทางในบล็อก <em>'ถ้า...ไม่งั้น'</em> อีกครั้ง";
+                    errorCategory = "ส่งผิดช่องคัดแยก";
+                } else if (simState.blockedByGate) {
+                    reason = "<strong>รถติดอยู่ที่หน้าด่านตรวจ (ช่องสีฟ้า)</strong> และข้ามคำสั่งเดินหน้าไปจนจบ ลองใช้เงื่อนไข <em>'ถ้าอยู่หน้าด่านตรวจ'</em> เพื่อเปิดสัญญาณด่านก่อนเดินผ่านครับ";
+                    errorCategory = "ไม่ได้เปิดสัญญาณด่านตรวจ";
+                } else if (simState.hitWallCount > 0 && simState.remainingPackages.length > 0) {
+                    reason = `<strong>รถชนขอบทาง/อาคาร (${simState.hitWallCount} ครั้ง)</strong> รถจึงหยุดอยู่กับที่และรันคำสั่งที่เหลือจนจบ ทำให้ไปไม่ถึงพัสดุ ลองนับจำนวนช่องเดินหน้าและเช็กทิศการเลี้ยวซ้าย-ขวาใหม่อีกทีนะ`;
+                    errorCategory = "เดินชนขอบทาง/นับช่องพลาด";
+                } else if (simState.remainingPackages.length > 0 && !simState.cargo) {
+                    reason = "<strong>รถวิ่งจบรอบแล้ว แต่ยังไม่ได้เก็บพัสดุเลย!</strong> อย่าลืมใส่คำสั่ง <em>'รับพัสดุ'</em> ในจังหวะที่รถจอดอยู่บนช่องเดียวกับกล่องพัสดุด้วยครับ";
+                    errorCategory = "ลืมคำสั่งรับพัสดุ";
+                } else if (simState.cargo && !simState.cargo.damaged) {
+                    const onGoal = lvl.goals.some(g => g.x === simState.x && g.y === simState.y);
+                    if (onGoal) {
+                        reason = "<strong>รถขับมาถึงจุดส่งสินค้าแล้ว แต่ลืมวางของลง!</strong> เพิ่มคำสั่ง <em>'ส่งพัสดุ'</em> ปิดท้ายชุดคำสั่งได้เลยครับ";
+                        errorCategory = "ลืมคำสั่งส่งพัสดุ";
+                    } else {
+                        reason = "<strong>รับพัสดุขึ้นรถแล้ว แต่ยังไปไม่ถึงจุดส่งสินค้า</strong> (หรือจอดเลยจุดหมาย) ลองปรับจำนวนก้าวเดินหน้าหรือจังหวะเลี้ยวใหม่ครับ";
+                        errorCategory = "จอดไม่ตรงจุดส่ง";
+                    }
+                } else if (simState.hitWallCount > 0) {
+                    reason = `<strong>ระหว่างทางรถเดินชนขอบทาง ${simState.hitWallCount} ครั้ง</strong> ทำให้ตำแหน่งปลายทางคลาดเคลื่อน ลองไล่ดูทีละบล็อกว่าเริ่มชนตรงจังหวะไหนครับ`;
+                    errorCategory = "เดินชนขอบทาง/นับช่องพลาด";
+                } else {
+                    reason = "ชุดคำสั่งทำงานจบแล้วแต่เงื่อนไขยังไม่ครบ ลองสังเกตเส้นทางเดินรถและปรับแก้ลำดับบล็อกใหม่อีกครั้งครับ";
+                }
+
+                // Log error category for teacher analytics
+                stats.errorHistory.push(errorCategory);
+                saveAnalytics();
+
+                msgEl.innerHTML = reason;
+                checklistEl.innerHTML = `
+                    <div class="flex items-center justify-between text-slate-600">
+                        <span>จำนวนบล็อกที่ใช้รอบนี้:</span>
+                        <strong>${totalBlocks} บล็อก</strong>
+                    </div>
+                    <div class="flex items-center justify-between text-slate-600">
+                        <span>จำนวนครั้งที่ทดลองรันในด่านนี้:</span>
+                        <strong>${stats.attempts} ครั้ง</strong>
+                    </div>
+                `;
+            }
+        }
+
+        /**
+         * ============================================================================
+         * 10. MODALS & TEACHER ANALYTICS DASHBOARD
+         * ============================================================================
+         */
+        function openModal(id) {
+            playSfx('click');
+            document.getElementById(id).classList.remove("hidden");
+        }
+
+        function closeModal(id) {
+            playSfx('click');
+            document.getElementById(id).classList.add("hidden");
+        }
+
+        function openTeacherDashboard() {
+            const body = document.getElementById("teacher-stats-body");
+            let totalStars = 0;
+            let completedCount = 0;
+            let totalAttempts = 0;
+            const errorCounts = {};
+
+            LEVELS.forEach(lvl => {
+                const st = getLevelStats(lvl.id);
+                totalStars += st.stars;
+                if (st.completed) completedCount++;
+                totalAttempts += st.attempts;
+                st.errorHistory.forEach(err => {
+                    errorCounts[err] = (errorCounts[err] || 0) + 1;
+                });
+            });
+
+            // Summary Cards
+            let html = `
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
+                        <div class="text-xs text-blue-600 font-medium">ผ่านด่านแล้ว</div>
+                        <div class="text-xl font-bold text-blue-900 mt-0.5">${completedCount} / ${LEVELS.length}</div>
+                    </div>
+                    <div class="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center">
+                        <div class="text-xs text-amber-600 font-medium">ดาวสะสมรวม</div>
+                        <div class="text-xl font-bold text-amber-900 mt-0.5"><i class="fa-solid fa-star text-amber-400 mr-1"></i>${totalStars} / ${LEVELS.length * 3}</div>
+                    </div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                        <div class="text-xs text-slate-600 font-medium">รันทดสอบทั้งหมด</div>
+                        <div class="text-xl font-bold text-slate-900 mt-0.5">${totalAttempts} ครั้ง</div>
+                    </div>
+                </div>
+            `;
+
+            // Common Error Diagnostic Section
+            const errorEntries = Object.entries(errorCounts).sort((a, b) => b[1] - a[1]);
+            html += `<div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200">
+                <h4 class="font-bold text-xs uppercase tracking-wider text-slate-500 mb-2">จุดผิดพลาดที่พบบ่อย (วิเคราะห์แนวคิดที่ยังสับสน)</h4>`;
+            if (errorEntries.length === 0) {
+                html += `<p class="text-xs text-slate-400">ยังไม่มีบันทึกข้อผิดพลาดในระบบ</p>`;
+            } else {
+                html += `<div class="space-y-1.5">`;
+                errorEntries.forEach(([err, count]) => {
+                    html += `
+                        <div class="flex items-center justify-between text-xs bg-white px-3 py-2 rounded-lg border border-slate-200">
+                            <span class="font-medium text-slate-700">${err}</span>
+                            <span class="px-2 py-0.5 rounded bg-rose-100 text-rose-700 font-bold">${count} ครั้ง</span>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+            }
+            html += `</div>`;
+
+            // Per-level breakdown table
+            html += `<div class="space-y-2">
+                <h4 class="font-bold text-xs uppercase tracking-wider text-slate-500">รายละเอียดรายด่าน</h4>`;
+            LEVELS.forEach(lvl => {
+                const st = getLevelStats(lvl.id);
+                html += `
+                    <div class="flex items-center justify-between p-2.5 rounded-xl border ${st.completed ? 'bg-emerald-50/40 border-emerald-200' : 'bg-white border-slate-200'} text-xs">
+                        <div>
+                            <div class="font-bold text-slate-800">ด่าน ${lvl.id}: ${lvl.title}</div>
+                            <div class="text-[11px] text-slate-500">${lvl.concept} • ทดลองรัน ${st.attempts} ครั้ง</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-amber-400 text-sm">
+                                ${[1, 2, 3].map(s => s <= st.stars ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star text-slate-300"></i>').join('')}
+                            </div>
+                            <div class="text-[11px] text-slate-500 mt-0.5">
+                                ${st.bestBlocks !== null ? `ดีที่สุด: ${st.bestBlocks} บล็อก` : 'ยังไม่ผ่าน'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+
+            body.innerHTML = html;
+            openModal("modal-teacher");
+        }
+
+        function resetAllProgress() {
+            analytics = { levels: {} };
+            saveAnalytics();
+            renderLevelSelector();
+            updateAttemptDisplay();
+            openTeacherDashboard();
+        }
+
+        // Start application on window load
+        window.onload = function () {
+            init();
+        };
+    </script>
+</body>
+</html>
